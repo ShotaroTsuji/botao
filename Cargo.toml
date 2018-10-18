@@ -1,0 +1,7 @@
+[package]
+name = "botao"
+version = "0.1.0"
+authors = ["Shotaro Tsuji <Shotaro.Tsuji@gmail.com>"]
+
+[dependencies]
+memchr = "2.1.0"
