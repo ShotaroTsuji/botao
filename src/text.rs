@@ -1,5 +1,6 @@
 use memchr::memchr;
 use std::marker::PhantomData;
+use std::io;
 
 pub fn next_field(delim: u8, record: &str) -> (&str, &str) {
     let record = record.trim();
@@ -13,7 +14,7 @@ pub fn next_field(delim: u8, record: &str) -> (&str, &str) {
 pub fn enum_fields<'a>(delim: u8, record: &'a str) -> EnumFields<'a> {
     EnumFields {
         delim: delim,
-        record: record,
+        record: record.trim(),
         _phantom: PhantomData,
     }
 }
@@ -34,6 +35,47 @@ impl<'a> Iterator for EnumFields<'a> {
             let (field, result) = next_field(self.delim, self.record);
             self.record = result;
             Some(field)
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct DataFileReader<R: io::BufRead> {
+    buffer: R,
+    record_delimiter: u8,
+    field_delimiter: u8,
+}
+
+#[derive(Debug)]
+pub enum DataRecord {
+    Fields(Vec<String>),
+    Blank,
+    EOF,
+}
+
+impl<R: io::BufRead> DataFileReader<R> {
+    pub fn new(buffer: R) -> Self {
+        DataFileReader {
+            buffer: buffer,
+            record_delimiter: b'\n',
+            field_delimiter: b',',
+        }
+    }
+
+    pub fn next_record(&mut self) -> DataRecord {
+        let mut buf = Vec::new();
+        let result = self.buffer.read_until(self.record_delimiter, &mut buf);
+        if result.unwrap() == 0 {
+            DataRecord::EOF
+        } else {
+            let s = String::from_utf8(buf).unwrap();
+            let fields: Vec<String>
+                = enum_fields(self.field_delimiter, s.as_str()).map(|s| s.to_owned()).collect();
+            if fields.len() == 0 {
+                DataRecord::Blank
+            } else {
+                DataRecord::Fields(fields)
+            }
         }
     }
 }
