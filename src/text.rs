@@ -49,6 +49,7 @@ pub struct DataFileReader<R: io::BufRead> {
 #[derive(Debug)]
 pub enum DataRecord {
     Fields(Vec<String>),
+    Comment(String),
     Blank,
     EOF,
 }
@@ -68,13 +69,17 @@ impl<R: io::BufRead> DataFileReader<R> {
         if result.unwrap() == 0 {
             DataRecord::EOF
         } else {
-            let s = String::from_utf8(buf).unwrap();
-            let fields: Vec<String>
-                = enum_fields(self.field_delimiter, s.as_str()).map(|s| s.to_owned()).collect();
-            if fields.len() == 0 {
-                DataRecord::Blank
+            if buf[0] == b'#' {
+                DataRecord::Comment(String::from_utf8(buf).unwrap())
             } else {
-                DataRecord::Fields(fields)
+                let s = String::from_utf8(buf).unwrap();
+                let fields: Vec<String>
+                    = enum_fields(self.field_delimiter, s.as_str()).map(|s| s.to_owned()).collect();
+                if fields.len() == 0 {
+                    DataRecord::Blank
+                } else {
+                    DataRecord::Fields(fields)
+                }
             }
         }
     }
