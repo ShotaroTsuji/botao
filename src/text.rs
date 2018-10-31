@@ -63,6 +63,14 @@ impl<R: io::BufRead> DataFileReader<R> {
         }
     }
 
+    pub fn field_delimiter(&self) -> &u8 {
+        &self.field_delimiter
+    }
+
+    pub fn set_field_delimiter(&mut self, delim: u8) {
+        self.field_delimiter = delim;
+    }
+
     pub fn next_record(&mut self) -> DataRecord {
         let mut buf = Vec::new();
         let result = self.buffer.read_until(self.record_delimiter, &mut buf);
