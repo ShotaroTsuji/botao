@@ -31,7 +31,7 @@ where
     println!("# test_datafile_reader");
     println!("{:?}", rdr);
     loop {
-        let record = rdr.next_record();
+        let record = rdr.next_record().unwrap();
         match record {
             DataRecord::Fields(fields) => {
                 println!("FIELDS: {:?}", fields);
