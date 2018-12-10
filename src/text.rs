@@ -1,7 +1,6 @@
 extern crate failure;
 use memchr::memchr;
 use failure::Fail;
-use failure::ResultExt;
 use std::marker::PhantomData;
 use std::io;
 use std::fmt;
@@ -125,59 +124,8 @@ pub struct DataFileReader<R: io::BufRead> {
 pub enum DataRecord {
     Fields(Vec<String>),
     Comment(String),
-    //LocalAttr(String),
-    //GlobalAttr(String),
     Blank,
     EOF,
-}
-
-fn parse_ident(buf: &str) -> (&str, &str) {
-    let mut iter = buf.char_indices().peekable();
-    let mut end_index = None;
-    let (_, c) = iter.next().unwrap();
-
-    if c.is_ascii_alphabetic() {
-        loop {
-            {
-                if let Some((i, c)) = iter.peek() {
-                    if !c.is_ascii_alphanumeric() {
-                        end_index = Some(*i);
-                        break;
-                    }
-                }
-            }
-            if iter.next().is_none() { break; }
-        }
-    }
-
-    if let Some(e) = end_index {
-        (&buf[0..e], &buf[e..])
-    } else {
-        ("", buf)
-    }
-}
-
-fn skip_whitespace(buf: &str) -> &str {
-    buf.trim_start()
-}
-
-fn parse_attribute(attr: &str) -> Result<(), Error>{
-    println!("{}", attr);
-    let open = attr.find('[');
-    let close = attr.rfind(']');
-    let attr = match (open, close) {
-        (Some(u), Some(v)) => {
-            &attr[u+1..v]
-        },
-        _ => { return Err(ErrorKind::Attribute.into()); }
-    };
-
-    let (ident, buf) = parse_ident(attr);
-    let buf = skip_whitespace(buf);
-    println!("{}", ident);
-    println!("{}", buf);
-
-    Ok(())
 }
 
 impl<R: io::BufRead> DataFileReader<R> {
@@ -203,14 +151,7 @@ impl<R: io::BufRead> DataFileReader<R> {
         if result == 0 {
             Ok(DataRecord::EOF)
         } else {
-            /*
-            if buf.starts_with(b"#[") {
-                Ok(DataRecord::LocalAttr(String::from_utf8(buf)?))
-            } else if buf.starts_with(b"#![") {
-                let attr = String::from_utf8(buf)?;
-                parse_attribute(&attr[..])?;
-                Ok(DataRecord::GlobalAttr(attr))
-            } else*/ if buf[0] == b'#' {
+            if buf[0] == b'#' {
                 Ok(DataRecord::Comment(String::from_utf8(buf)?))
             } else {
                 let s = String::from_utf8(buf)?;
