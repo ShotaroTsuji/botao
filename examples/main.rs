@@ -1,6 +1,6 @@
 extern crate botao;
 use botao::text::enum_fields;
-use botao::text::{DataFileReader, DataRecord};
+use botao::text::{DataFileReader, DataRecord, DataTableReader};
 use std::io;
 use std::fs::File;
 
@@ -28,10 +28,12 @@ where
     R: io::BufRead + ::std::fmt::Debug,
 {
     let mut rdr = DataFileReader::new(buf);
+    let mut buf = Vec::new();
     println!("# test_datafile_reader");
     println!("{:?}", rdr);
     loop {
-        let record = rdr.next_record().unwrap();
+        buf.clear();
+        let record = rdr.next_record(&mut buf).unwrap();
         match record {
             DataRecord::Fields(fields) => {
                 println!("FIELDS: {:?}", fields);
@@ -48,6 +50,35 @@ where
             },
         }
     }
+}
+
+fn test_datatable_reader<R>(buf: R)
+where
+    R: io::BufRead + ::std::fmt::Debug,
+{
+    let rdr = DataFileReader::new(buf);
+    let mut rdr = DataTableReader::<f64, _>::new(rdr);
+    let mut buf: Vec<u8> = Vec::new();
+    println!("# test_datatable_reader");
+    println!("{:?}", rdr);
+
+    while let Some(vec) = rdr.next_record(&mut buf) {
+        println!("{:?}", vec);
+        buf.clear();
+    }
+}
+
+fn test_datatable_into<R>(buf: R)
+where
+    R: io::BufRead + ::std::fmt::Debug,
+{
+    let rdr = DataFileReader::new(buf);
+    let rdr = DataTableReader::<f64, _>::new(rdr);
+    println!("# test_datatable_reader");
+    println!("{:?}", rdr);
+
+    let table = rdr.into_table_with_size_check();
+    println!("{:?}", table);
 }
 
 
@@ -75,4 +106,16 @@ fn main() {
 
     println!("");
     test_datafile_reader(io::BufReader::new(File::open("examples/test2.txt").unwrap()));
+
+    println!("");
+    test_datatable_reader(io::BufReader::new(File::open("examples/test1.txt").unwrap()));
+
+    println!("");
+    test_datatable_reader(io::BufReader::new(File::open("examples/test2.txt").unwrap()));
+
+    println!("");
+    test_datatable_into(io::BufReader::new(File::open("examples/test1.txt").unwrap()));
+
+    println!("");
+    test_datatable_into(io::BufReader::new(File::open("examples/test2.txt").unwrap()));
 }

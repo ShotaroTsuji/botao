@@ -1,4 +1,3 @@
-extern crate failure;
 use memchr::memchr;
 use failure::Fail;
 use std::marker::PhantomData;
@@ -105,8 +104,8 @@ impl From<io::Error> for Error {
     }
 }
 
-impl From<::std::string::FromUtf8Error> for Error {
-    fn from(error: ::std::string::FromUtf8Error) -> Error {
+impl From<std::string::FromUtf8Error> for Error {
+    fn from(error: std::string::FromUtf8Error) -> Error {
         Error {
             inner: error.context(ErrorKind::FromUTF8),
         }
@@ -145,16 +144,15 @@ impl<R: io::BufRead> DataFileReader<R> {
         self.field_delimiter = delim;
     }
 
-    pub fn next_record(&mut self) -> Result<DataRecord, Error> {
-        let mut buf = Vec::new();
-        let result = self.buffer.read_until(self.record_delimiter, &mut buf)?;
+    pub fn next_record(&mut self, buf: &mut Vec<u8>) -> Result<DataRecord, Error> {
+        let result = self.buffer.read_until(self.record_delimiter, buf)?;
         if result == 0 {
             Ok(DataRecord::EOF)
         } else {
             if buf[0] == b'#' {
-                Ok(DataRecord::Comment(String::from_utf8(buf)?))
+                Ok(DataRecord::Comment(String::from_utf8(buf.clone())?))
             } else {
-                let s = String::from_utf8(buf)?;
+                let s = String::from_utf8(buf.clone())?;
                 let fields: Vec<String>
                     = enum_fields(self.field_delimiter, s.as_str()).map(|s| s.to_owned()).collect();
                 if fields.len() == 0 {
@@ -164,5 +162,77 @@ impl<R: io::BufRead> DataFileReader<R> {
                 }
             }
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct DataTableReader<T, R>
+where
+    R: io::BufRead,
+    T: std::str::FromStr
+{
+    reader: DataFileReader<R>,
+    _phantom: PhantomData<fn() -> T>,
+}
+
+// blank lines are treated as missing values.
+impl<T, R> DataTableReader<T, R>
+where
+    R: io::BufRead,
+    T: std::str::FromStr,
+    <T as std::str::FromStr>::Err: std::fmt::Debug,
+{
+    pub fn new(reader: DataFileReader<R>) -> Self {
+        DataTableReader {
+            reader: reader,
+            _phantom: PhantomData,
+        }
+    }
+
+    pub fn into_inner(self) -> DataFileReader<R> {
+        self.reader
+    }
+
+    pub fn next_record(&mut self, buf: &mut Vec<u8>) -> Option<Vec<T>> {
+        let record = self.reader.next_record(buf).unwrap();
+        match record {
+            DataRecord::EOF => None,
+            DataRecord::Comment(_) => {
+                buf.clear();
+                self.next_record(buf)
+            }
+            DataRecord::Blank => Some(Vec::new()),
+            DataRecord::Fields(fields) => {
+                Some(fields.iter().map(|f| T::from_str(f).unwrap()).collect())
+            },
+        }
+    }
+
+    pub fn into_table_with_size_check(mut self) -> Vec<Vec<T>> {
+        let mut result = Vec::new();
+        let mut buf = Vec::new();
+
+        let mut field_len = None;
+        let record = self.next_record(&mut buf);
+
+        if let Some(vec) = record {
+            field_len = Some(vec.len());
+            result.push(vec);
+        } else {
+            return result;
+        }
+
+        let field_len = field_len.unwrap();
+        buf.clear();
+
+        while let Some(vec) = self.next_record(&mut buf) {
+            if vec.len() != field_len {
+                panic!("size errror");
+            }
+            result.push(vec);
+            buf.clear();
+        }
+
+        result
     }
 }
