@@ -2,7 +2,6 @@ use memchr::memchr;
 use failure::Fail;
 use std::marker::PhantomData;
 use std::io;
-use std::fmt;
 
 pub fn next_field(delim: u8, record: &str) -> (&str, &str) {
     let record = record.trim();
@@ -42,78 +41,17 @@ impl<'a> Iterator for EnumFields<'a> {
 }
 
 #[derive(Debug, Fail)]
-pub enum ErrorKind {
-    #[fail(display = "IO error")]
-    Io,
-    #[fail(display = "From UTF-8 error")]
-    FromUTF8,
-    #[fail(display = "Attribute parse error")]
-    Attribute,
+pub enum ReaderError {
+    #[fail(display = "IO error: {}", _0)]
+    Io(#[cause] std::io::Error),
+    #[fail(display = "From UTF-8 error: {}", _0)]
+    FromUTF8(#[cause] std::string::FromUtf8Error),
+    #[fail(display = "Data table size error")]
+    SizeError,
 }
 
 #[derive(Debug)]
-pub struct Error {
-    inner: failure::Context<ErrorKind>,
-}
-
-impl failure::Fail for Error {
-    fn cause(&self) -> Option<&failure::Fail> {
-        self.inner.cause()
-    }
-
-    fn backtrace(&self) -> Option<&failure::Backtrace> {
-        self.inner.backtrace()
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(&self.inner, f)
-    }
-}
-
-impl Error {
-    pub fn new(inner: failure::Context<ErrorKind>) -> Error {
-        Error { inner }
-    }
-
-    pub fn kind(&self) -> &ErrorKind {
-        self.inner.get_context()
-    }
-}
-
-impl From<ErrorKind> for Error {
-    fn from(kind: ErrorKind) -> Error {
-        Error {
-            inner: failure::Context::new(kind),
-        }
-    }
-}
-
-impl From<failure::Context<ErrorKind>> for Error {
-    fn from(inner: failure::Context<ErrorKind>) -> Error {
-        Error { inner }
-    }
-}
-
-impl From<io::Error> for Error {
-    fn from(error: io::Error) -> Error {
-        Error {
-            inner: error.context(ErrorKind::Io),
-        }
-    }
-}
-
-impl From<std::string::FromUtf8Error> for Error {
-    fn from(error: std::string::FromUtf8Error) -> Error {
-        Error {
-            inner: error.context(ErrorKind::FromUTF8),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct DataFileReader<R: io::BufRead> {
+pub struct DataRecordReader<R: io::BufRead> {
     buffer: R,
     record_delimiter: u8,
     field_delimiter: u8,
@@ -127,9 +65,9 @@ pub enum DataRecord {
     EOF,
 }
 
-impl<R: io::BufRead> DataFileReader<R> {
+impl<R: io::BufRead> DataRecordReader<R> {
     pub fn new(buffer: R) -> Self {
-        DataFileReader {
+        DataRecordReader {
             buffer: buffer,
             record_delimiter: b'\n',
             field_delimiter: b',',
@@ -144,15 +82,21 @@ impl<R: io::BufRead> DataFileReader<R> {
         self.field_delimiter = delim;
     }
 
-    pub fn next_record(&mut self, buf: &mut Vec<u8>) -> Result<DataRecord, Error> {
-        let result = self.buffer.read_until(self.record_delimiter, buf)?;
+    pub fn next_record(&mut self, buf: &mut Vec<u8>) -> Result<DataRecord, failure::Error> {
+        let result = self.buffer.read_until(self.record_delimiter, buf)
+                         .map_err(|e| ReaderError::Io(e))?;
         if result == 0 {
             Ok(DataRecord::EOF)
         } else {
             if buf[0] == b'#' {
-                Ok(DataRecord::Comment(String::from_utf8(buf.clone())?))
+                let comment = String::from_utf8(buf.clone())
+                                     .map_err(|e| ReaderError::FromUTF8(e))?;
+                buf.clear();
+                Ok(DataRecord::Comment(comment))
             } else {
-                let s = String::from_utf8(buf.clone())?;
+                let s = String::from_utf8(buf.clone())
+                               .map_err(|e| ReaderError::FromUTF8(e))?;
+                buf.clear();
                 let fields: Vec<String>
                     = enum_fields(self.field_delimiter, s.as_str()).map(|s| s.to_owned()).collect();
                 if fields.len() == 0 {
@@ -166,7 +110,83 @@ impl<R: io::BufRead> DataFileReader<R> {
 }
 
 #[derive(Debug)]
-pub struct DataTableReader<T, R>
+pub struct DataBlockReader<T, R>
+where
+    R: io::BufRead,
+    T: std::str::FromStr
+{
+    reader: DataRecordReader<R>,
+    _phantom: PhantomData<fn() -> T>,
+}
+
+// blank lines are treated as missing values.
+impl<T, R> DataBlockReader<T, R>
+where
+    R: io::BufRead,
+    T: std::str::FromStr,
+    <T as std::str::FromStr>::Err: failure::Fail,
+{
+    pub fn new(reader: DataRecordReader<R>) -> Self {
+        DataBlockReader {
+            reader: reader,
+            _phantom: PhantomData,
+        }
+    }
+
+    pub fn into_inner(self) -> DataRecordReader<R> {
+        self.reader
+    }
+
+    pub fn next_record(&mut self, buf: &mut Vec<u8>) -> Result<Option<Vec<T>>, failure::Error> {
+        let record = self.reader.next_record(buf)?;
+        match record {
+            DataRecord::EOF => Ok(None),
+            DataRecord::Comment(_) => {
+                self.next_record(buf)
+            }
+            DataRecord::Blank => Ok(Some(Vec::new())),
+            DataRecord::Fields(fields) => {
+                let vec = fields.iter()
+                                .map(|f| T::from_str(f))
+                                .collect::<Result<Vec<_>, _>>();
+                match vec {
+                    Ok(vec) => Ok(Some(vec)),
+                    Err(e) => Err(e.into()),
+                }
+            },
+        }
+    }
+
+    pub fn into_table_with_size_check(mut self) -> Result<Vec<Vec<T>>, failure::Error> {
+        let mut result = Vec::new();
+        let mut buf = Vec::new();
+
+        let mut _field_len = None;
+        let record = self.next_record(&mut buf)?;
+
+        if let Some(vec) = record {
+            _field_len = Some(vec.len());
+            result.push(vec);
+        } else {
+            return Ok(result);
+        }
+
+        let field_len = _field_len.unwrap();
+
+        while let Some(vec) = self.next_record(&mut buf)? {
+            if vec.len() != field_len {
+                return Err(ReaderError::SizeError.into());
+            }
+            result.push(vec);
+        }
+
+        Ok(result)
+    }
+}
+
+/*
+#[derive(Debug)]
+pub struct DataBlocksReader<T, R>
 where
     R: io::BufRead,
     T: std::str::FromStr
@@ -176,14 +196,14 @@ where
 }
 
 // blank lines are treated as missing values.
-impl<T, R> DataTableReader<T, R>
+impl<T, R> DataBlocksReader<T, R>
 where
     R: io::BufRead,
     T: std::str::FromStr,
-    <T as std::str::FromStr>::Err: std::fmt::Debug,
+    <T as std::str::FromStr>::Err: failure::Fail,
 {
     pub fn new(reader: DataFileReader<R>) -> Self {
-        DataTableReader {
+        DataBlocksReader {
             reader: reader,
             _phantom: PhantomData,
         }
@@ -193,46 +213,36 @@ where
         self.reader
     }
 
-    pub fn next_record(&mut self, buf: &mut Vec<u8>) -> Option<Vec<T>> {
-        let record = self.reader.next_record(buf).unwrap();
-        match record {
-            DataRecord::EOF => None,
-            DataRecord::Comment(_) => {
-                buf.clear();
-                self.next_record(buf)
-            }
-            DataRecord::Blank => Some(Vec::new()),
-            DataRecord::Fields(fields) => {
-                Some(fields.iter().map(|f| T::from_str(f).unwrap()).collect())
-            },
+    pub fn next_block(&mut self, buf: &mut Vec<u8>) -> Option<Vec<Vec<T>>> {
+        enum State {
+            None,
+            Fields,
+            Blank,
         }
-    }
+        let mut prev_state = State::None;
+        let mut result: Option<Vec<Vec<T>>> = None;
 
-    pub fn into_table_with_size_check(mut self) -> Vec<Vec<T>> {
-        let mut result = Vec::new();
-        let mut buf = Vec::new();
-
-        let mut field_len = None;
-        let record = self.next_record(&mut buf);
-
-        if let Some(vec) = record {
-            field_len = Some(vec.len());
-            result.push(vec);
-        } else {
-            return result;
-        }
-
-        let field_len = field_len.unwrap();
-        buf.clear();
-
-        while let Some(vec) = self.next_record(&mut buf) {
-            if vec.len() != field_len {
-                panic!("size errror");
-            }
-            result.push(vec);
-            buf.clear();
+        loop {
+            let record = self.reader.next_record(buf).unwrap();
+            match record {
+                DataRecord::EOF => { break; },
+                DataRecord::Comment(_) => { continue; },
+                DataRecord::Fields(fields) => {
+                    let vec = fields.iter().map(|f| T::from_str(f).unwrap())
+                                    .collect::<Vec<T>>();
+                    result.get_or_insert_with(|| Vec::new()).push(vec);
+                    prev_state = State::Fields;
+                },
+                DataRecord::Blank => {
+                    match prev_state {
+                        State::Blank => { break; },
+                        _ => { prev_state = State::Blank; },
+                    };
+                },
+            };
         }
 
         result
     }
 }
+*/

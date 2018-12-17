@@ -1,6 +1,6 @@
 extern crate botao;
 use botao::text::enum_fields;
-use botao::text::{DataFileReader, DataRecord, DataTableReader};
+use botao::text::{DataRecordReader, DataRecord, DataBlockReader};
 use std::io;
 use std::fs::File;
 
@@ -23,13 +23,13 @@ fn test_nested(delim: u8, record: &str) {
     }
 }
 
-fn test_datafile_reader<R>(buf: R)
+fn test_datarecord_reader<R>(buf: R)
 where
     R: io::BufRead + ::std::fmt::Debug,
 {
-    let mut rdr = DataFileReader::new(buf);
+    let mut rdr = DataRecordReader::new(buf);
     let mut buf = Vec::new();
-    println!("# test_datafile_reader");
+    println!("# test_datarecord_reader");
     println!("{:?}", rdr);
     loop {
         buf.clear();
@@ -52,22 +52,23 @@ where
     }
 }
 
-fn test_datatable_reader<R>(buf: R)
+fn test_datablock_reader<R>(buf: R)
 where
     R: io::BufRead + ::std::fmt::Debug,
 {
-    let rdr = DataFileReader::new(buf);
-    let mut rdr = DataTableReader::<f64, _>::new(rdr);
+    let rdr = DataRecordReader::new(buf);
+    let mut rdr = DataBlockReader::<f64, _>::new(rdr);
     let mut buf: Vec<u8> = Vec::new();
     println!("# test_datatable_reader");
     println!("{:?}", rdr);
 
-    while let Some(vec) = rdr.next_record(&mut buf) {
+    while let Some(vec) = rdr.next_record(&mut buf).unwrap() {
         println!("{:?}", vec);
         buf.clear();
     }
 }
 
+/*
 fn test_datatable_into<R>(buf: R)
 where
     R: io::BufRead + ::std::fmt::Debug,
@@ -81,6 +82,21 @@ where
     println!("{:?}", table);
 }
 
+fn test_datablock_reader<R>(buf: R)
+where
+    R: io::BufRead + ::std::fmt::Debug,
+{
+    let rdr = DataFileReader::new(buf);
+    let mut rdr = DataBlocksReader::<f64, _>::new(rdr);
+    let mut buf: Vec<u8> = Vec::new();
+    println!("# test_datablock_reader");
+    println!("{:?}", rdr);
+
+    while let Some(block) = rdr.next_block(&mut buf) {
+        println!("{:?}", block);
+    }
+}
+*/
 
 fn main() {
     test_enum_fields(b',', "10, 20, 30, 40");
@@ -99,23 +115,28 @@ fn main() {
 
     println!("");
     let data = b"10, 20, 30, 40\n5, 6, 7, 8\n\n1.2, 3.4 ,.05, 0.001\n";
-    test_datafile_reader(io::BufReader::new(&data[..]));
+    test_datarecord_reader(io::BufReader::new(&data[..]));
 
     println!("");
-    test_datafile_reader(io::BufReader::new(File::open("examples/test1.txt").unwrap()));
+    test_datarecord_reader(io::BufReader::new(File::open("examples/test1.txt").unwrap()));
 
     println!("");
-    test_datafile_reader(io::BufReader::new(File::open("examples/test2.txt").unwrap()));
+    test_datarecord_reader(io::BufReader::new(File::open("examples/test2.txt").unwrap()));
 
     println!("");
-    test_datatable_reader(io::BufReader::new(File::open("examples/test1.txt").unwrap()));
+    test_datablock_reader(io::BufReader::new(File::open("examples/test1.txt").unwrap()));
 
     println!("");
-    test_datatable_reader(io::BufReader::new(File::open("examples/test2.txt").unwrap()));
+    test_datablock_reader(io::BufReader::new(File::open("examples/test2.txt").unwrap()));
 
+    /*
     println!("");
     test_datatable_into(io::BufReader::new(File::open("examples/test1.txt").unwrap()));
 
     println!("");
     test_datatable_into(io::BufReader::new(File::open("examples/test2.txt").unwrap()));
+
+    println!("");
+    test_datablock_reader(io::BufReader::new(File::open("examples/test3.txt").unwrap()));
+    */
 }
