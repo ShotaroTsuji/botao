@@ -55,6 +55,7 @@ pub struct DataRecordReader<R: io::BufRead> {
     buffer: R,
     record_delimiter: u8,
     field_delimiter: u8,
+    peek_buf: Option<DataRecord>,
 }
 
 #[derive(Debug)]
@@ -71,6 +72,7 @@ impl<R: io::BufRead> DataRecordReader<R> {
             buffer: buffer,
             record_delimiter: b'\n',
             field_delimiter: b',',
+            peek_buf: None,
         }
     }
 
@@ -82,7 +84,18 @@ impl<R: io::BufRead> DataRecordReader<R> {
         self.field_delimiter = delim;
     }
 
+    pub fn peek_record(&mut self, buf: &mut Vec<u8>) -> Result<&DataRecord, failure::Error> {
+        if self.peek_buf.is_none() {
+            let record = self.next_record(buf)?;
+            let _ = self.peek_buf.replace(record);
+        }
+        Ok(self.peek_buf.as_ref().unwrap())
+    }
+
     pub fn next_record(&mut self, buf: &mut Vec<u8>) -> Result<DataRecord, failure::Error> {
+        if let Some(record) = self.peek_buf.take() {
+            return Ok(record);
+        }
         let result = self.buffer.read_until(self.record_delimiter, buf)
                          .map_err(|e| ReaderError::Io(e))?;
         if result == 0 {

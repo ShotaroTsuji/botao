@@ -52,6 +52,28 @@ where
     }
 }
 
+fn test_datarecord_peek<R>(buf: R)
+where
+    R: io::BufRead + ::std::fmt::Debug,
+{
+    let mut rdr = DataRecordReader::new(buf);
+    let mut buf = Vec::new();
+    println!("# test_datarecord_reader");
+    println!("{:?}", rdr);
+    loop {
+        let record = rdr.peek_record(&mut buf).unwrap();
+        println!("1st : {:?}", record);
+        let record = rdr.peek_record(&mut buf).unwrap();
+        println!("2nd : {:?}", record);
+        let record = rdr.next_record(&mut buf).unwrap();
+        println!("Last: {:?}", record);
+        match record {
+            DataRecord::EOF => { break; },
+            _ => {},
+        }
+    }
+}
+
 fn test_datablock_reader<R>(buf: R)
 where
     R: io::BufRead + ::std::fmt::Debug,
@@ -122,6 +144,9 @@ fn main() {
 
     println!("");
     test_datarecord_reader(io::BufReader::new(File::open("examples/test2.txt").unwrap()));
+
+    println!("");
+    test_datarecord_peek(io::BufReader::new(File::open("examples/test2.txt").unwrap()));
 
     println!("");
     test_datablock_reader(io::BufReader::new(File::open("examples/test1.txt").unwrap()));
