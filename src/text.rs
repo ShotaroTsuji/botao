@@ -3,6 +3,20 @@ use failure::Fail;
 use std::marker::PhantomData;
 use std::io;
 
+/// Finds the next field separated by `delim` in the given record.
+///
+/// This function returns two slices of the type `&str`.
+/// The former slice contains the next field and
+/// the latter slice contains the remaining data in the record.
+/// The whitespaces around records are trimmed.
+///
+/// # Examples
+///
+/// ```
+/// use botao::text::next_field;
+/// let result = next_field(b',', "10, 20, 30");
+/// assert_eq!(result, ("10", " 20, 30"));
+/// ```
 pub fn next_field(delim: u8, record: &str) -> (&str, &str) {
     let record = record.trim();
     if let Some(pos) = memchr(delim, record.as_bytes()) {
@@ -12,6 +26,22 @@ pub fn next_field(delim: u8, record: &str) -> (&str, &str) {
     }
 }
 
+/// Creates an iterator that returns fields in the given record.
+///
+/// This function creates an iterator that iterates over the fields.
+/// in the given record separated by `delim`.
+/// The whitespaces around records are trimmed.
+///
+/// # Examples
+///
+/// ```
+/// use botao::text::enum_fields;
+/// let mut iter = enum_fields(b',', "10, 20, 30");
+/// assert_eq!(iter.next(), Some("10"));
+/// assert_eq!(iter.next(), Some("20"));
+/// assert_eq!(iter.next(), Some("30"));
+/// assert_eq!(iter.next(), None);
+/// ```
 pub fn enum_fields<'a>(delim: u8, record: &'a str) -> EnumFields<'a> {
     EnumFields {
         delim: delim,
@@ -20,6 +50,9 @@ pub fn enum_fields<'a>(delim: u8, record: &'a str) -> EnumFields<'a> {
     }
 }
 
+/// An interator type created by the function `enum_fields`.
+///
+/// See the documentation of the function [`enum_fields`](./fn.enum_fields.html).
 pub struct EnumFields<'a> {
     delim: u8,
     record: &'a str,
@@ -40,16 +73,20 @@ impl<'a> Iterator for EnumFields<'a> {
     }
 }
 
+/// Error type returned by `DataRecordReader` and `DataBlockReader`.
 #[derive(Debug, Fail)]
 pub enum ReaderError {
     #[fail(display = "IO error: {}", _0)]
     Io(#[cause] std::io::Error),
     #[fail(display = "From UTF-8 error: {}", _0)]
     FromUTF8(#[cause] std::string::FromUtf8Error),
-    #[fail(display = "Data table size error")]
-    SizeError,
 }
 
+/// `DataRecordReader` provides a function of reading records.
+///
+/// The struct `DataRecordReader` reads the text records in the given file.
+/// Each record is stored in each line.
+/// The lines are delimited with the LF.
 #[derive(Debug)]
 pub struct DataRecordReader<R: io::BufRead> {
     buffer: R,
@@ -58,15 +95,24 @@ pub struct DataRecordReader<R: io::BufRead> {
     peek_buf: Option<DataRecord>,
 }
 
+/// `DataRecord` type represents the records in data files.
 #[derive(Debug)]
 pub enum DataRecord {
+    /// A record with fields.
     Fields(Vec<String>),
+    /// A comment line.
     Comment(String),
+    /// A blank line.
     Blank,
+    /// The End-Of-File.
     EOF,
 }
 
 impl<R: io::BufRead> DataRecordReader<R> {
+    /// Creates a new `DataRecordReader`.
+    ///
+    /// The method `new` creates a `DataRecordReader` from a stream reader that
+    /// implements the trait `std::io::BufRead`.
     pub fn new(buffer: R) -> Self {
         DataRecordReader {
             buffer: buffer,
@@ -122,6 +168,11 @@ impl<R: io::BufRead> DataRecordReader<R> {
     }
 }
 
+/// A reader type that reads data blocks in the given file.
+///
+/// The type `DataBlockReader` is built on `DataRecordReader`.
+/// A data block is a contiguous series of records.
+/// The blocks are separated by one or more blank lines.
 #[derive(Debug)]
 pub struct DataBlockReader<T, R>
 where
@@ -151,6 +202,11 @@ where
         self.reader
     }
 
+    /// Returns a next block or `None`.
+    ///
+    /// This method reads a data block. It reads only one separating blank line.
+    /// If there may be multiple blank lines, you must call the method `consume_blanks`
+    /// after calling this method.
     pub fn next_block(&mut self) -> Result<Option<Vec<Vec<T>>>, failure::Error> {
         let mut block: Option<Vec<Vec<T>>> = None;
         loop {

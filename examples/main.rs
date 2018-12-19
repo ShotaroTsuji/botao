@@ -5,8 +5,8 @@ use std::io;
 use std::fs::File;
 
 fn test_enum_fields(delim: u8, record: &str) {
-    println!("delim : '{}'", delim as char);
-    println!("record: {}", record);
+    println!("delim : {:?}", delim as char);
+    println!("record: {:?}", record);
     for field in enum_fields(delim, record) {
         println!("FIELD: {:?}", field);
     }
@@ -14,11 +14,11 @@ fn test_enum_fields(delim: u8, record: &str) {
 
 fn test_nested(delim: u8, record: &str) {
     println!("NESTED");
-    println!("record: {}", record);
+    println!("record: {:?}", record);
     for field in enum_fields(b';', record) {
         println!("FIELD");
         for field in enum_fields(delim, field) {
-            println!("{}", field);
+            println!("{:?}", field);
         }
     }
 }
