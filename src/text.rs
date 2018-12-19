@@ -232,7 +232,8 @@ where
         loop {
             let record = self.reader.peek_record(&mut self.buffer)?;
             match record {
-                DataRecord::Blank => { self.reader.next_record(&mut self.buffer).unwrap(); },
+                DataRecord::Blank | DataRecord::Comment(_)
+                    => { self.reader.next_record(&mut self.buffer).unwrap(); },
                 _ => break,
             };
         };
