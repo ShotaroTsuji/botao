@@ -125,4 +125,7 @@ fn main() {
 
     println!("");
     test_datablock_reader(io::BufReader::new(File::open("examples/test3.txt").unwrap()));
+
+    println!("");
+    test_datablock_reader(io::BufReader::new(File::open("examples/test4.txt").unwrap()));
 }
