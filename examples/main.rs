@@ -80,45 +80,14 @@ where
 {
     let rdr = DataRecordReader::new(buf);
     let mut rdr = DataBlockReader::<f64, _>::new(rdr);
-    let mut buf: Vec<u8> = Vec::new();
-    println!("# test_datatable_reader");
-    println!("{:?}", rdr);
-
-    while let Some(vec) = rdr.next_record(&mut buf).unwrap() {
-        println!("{:?}", vec);
-        buf.clear();
-    }
-}
-
-/*
-fn test_datatable_into<R>(buf: R)
-where
-    R: io::BufRead + ::std::fmt::Debug,
-{
-    let rdr = DataFileReader::new(buf);
-    let rdr = DataTableReader::<f64, _>::new(rdr);
-    println!("# test_datatable_reader");
-    println!("{:?}", rdr);
-
-    let table = rdr.into_table_with_size_check();
-    println!("{:?}", table);
-}
-
-fn test_datablock_reader<R>(buf: R)
-where
-    R: io::BufRead + ::std::fmt::Debug,
-{
-    let rdr = DataFileReader::new(buf);
-    let mut rdr = DataBlocksReader::<f64, _>::new(rdr);
-    let mut buf: Vec<u8> = Vec::new();
     println!("# test_datablock_reader");
     println!("{:?}", rdr);
 
-    while let Some(block) = rdr.next_block(&mut buf) {
-        println!("{:?}", block);
+    while let Some(vec) = rdr.next_block().unwrap() {
+        println!("{:?}", vec);
+        rdr.consume_blanks().unwrap();
     }
 }
-*/
 
 fn main() {
     test_enum_fields(b',', "10, 20, 30, 40");
@@ -154,14 +123,6 @@ fn main() {
     println!("");
     test_datablock_reader(io::BufReader::new(File::open("examples/test2.txt").unwrap()));
 
-    /*
-    println!("");
-    test_datatable_into(io::BufReader::new(File::open("examples/test1.txt").unwrap()));
-
-    println!("");
-    test_datatable_into(io::BufReader::new(File::open("examples/test2.txt").unwrap()));
-
     println!("");
     test_datablock_reader(io::BufReader::new(File::open("examples/test3.txt").unwrap()));
-    */
 }

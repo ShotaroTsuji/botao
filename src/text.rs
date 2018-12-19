@@ -129,10 +129,10 @@ where
     T: std::str::FromStr
 {
     reader: DataRecordReader<R>,
+    buffer: Vec<u8>,
     _phantom: PhantomData<fn() -> T>,
 }
 
-// blank lines are treated as missing values.
 impl<T, R> DataBlockReader<T, R>
 where
     R: io::BufRead,
@@ -142,6 +142,7 @@ where
     pub fn new(reader: DataRecordReader<R>) -> Self {
         DataBlockReader {
             reader: reader,
+            buffer: Vec::new(),
             _phantom: PhantomData,
         }
     }
@@ -150,112 +151,35 @@ where
         self.reader
     }
 
-    pub fn next_record(&mut self, buf: &mut Vec<u8>) -> Result<Option<Vec<T>>, failure::Error> {
-        let record = self.reader.next_record(buf)?;
-        match record {
-            DataRecord::EOF => Ok(None),
-            DataRecord::Comment(_) => {
-                self.next_record(buf)
-            }
-            DataRecord::Blank => Ok(Some(Vec::new())),
-            DataRecord::Fields(fields) => {
-                let vec = fields.iter()
-                                .map(|f| T::from_str(f))
-                                .collect::<Result<Vec<_>, _>>();
-                match vec {
-                    Ok(vec) => Ok(Some(vec)),
-                    Err(e) => Err(e.into()),
-                }
-            },
-        }
-    }
-
-    pub fn into_table_with_size_check(mut self) -> Result<Vec<Vec<T>>, failure::Error> {
-        let mut result = Vec::new();
-        let mut buf = Vec::new();
-
-        let mut _field_len = None;
-        let record = self.next_record(&mut buf)?;
-
-        if let Some(vec) = record {
-            _field_len = Some(vec.len());
-            result.push(vec);
-        } else {
-            return Ok(result);
-        }
-
-        let field_len = _field_len.unwrap();
-
-        while let Some(vec) = self.next_record(&mut buf)? {
-            if vec.len() != field_len {
-                return Err(ReaderError::SizeError.into());
-            }
-            result.push(vec);
-        }
-
-        Ok(result)
-    }
-}
-
-/*
-#[derive(Debug)]
-pub struct DataBlocksReader<T, R>
-where
-    R: io::BufRead,
-    T: std::str::FromStr
-{
-    reader: DataFileReader<R>,
-    _phantom: PhantomData<fn() -> T>,
-}
-
-// blank lines are treated as missing values.
-impl<T, R> DataBlocksReader<T, R>
-where
-    R: io::BufRead,
-    T: std::str::FromStr,
-    <T as std::str::FromStr>::Err: failure::Fail,
-{
-    pub fn new(reader: DataFileReader<R>) -> Self {
-        DataBlocksReader {
-            reader: reader,
-            _phantom: PhantomData,
-        }
-    }
-
-    pub fn into_inner(self) -> DataFileReader<R> {
-        self.reader
-    }
-
-    pub fn next_block(&mut self, buf: &mut Vec<u8>) -> Option<Vec<Vec<T>>> {
-        enum State {
-            None,
-            Fields,
-            Blank,
-        }
-        let mut prev_state = State::None;
-        let mut result: Option<Vec<Vec<T>>> = None;
-
+    pub fn next_block(&mut self) -> Result<Option<Vec<Vec<T>>>, failure::Error> {
+        let mut block: Option<Vec<Vec<T>>> = None;
         loop {
-            let record = self.reader.next_record(buf).unwrap();
+            let record = self.reader.next_record(&mut self.buffer)?;
             match record {
-                DataRecord::EOF => { break; },
-                DataRecord::Comment(_) => { continue; },
+                DataRecord::EOF => break,
+                DataRecord::Blank => break,
+                DataRecord::Comment(_) => continue,
                 DataRecord::Fields(fields) => {
-                    let vec = fields.iter().map(|f| T::from_str(f).unwrap())
-                                    .collect::<Vec<T>>();
-                    result.get_or_insert_with(|| Vec::new()).push(vec);
-                    prev_state = State::Fields;
-                },
-                DataRecord::Blank => {
-                    match prev_state {
-                        State::Blank => { break; },
-                        _ => { prev_state = State::Blank; },
+                    let vec = fields.iter().map(|f| T::from_str(f))
+                                           .collect::<Result<Vec<T>, _>>();
+                    match vec {
+                        Ok(vec) => { block.get_or_insert_with(|| Vec::new()).push(vec); },
+                        Err(e) => { return Err(e.into()); },
                     };
                 },
             };
-        }
+        };
+        Ok(block)
+    }
 
-        result
+    pub fn consume_blanks(&mut self) -> Result<(), failure::Error> {
+        loop {
+            let record = self.reader.peek_record(&mut self.buffer)?;
+            match record {
+                DataRecord::Blank => { self.reader.next_record(&mut self.buffer).unwrap(); },
+                _ => break,
+            };
+        };
+        Ok(())
     }
 }
-*/
