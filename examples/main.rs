@@ -85,7 +85,8 @@ where
 
     while let Some(vec) = rdr.next_block().unwrap() {
         println!("{:?}", vec);
-        rdr.consume_blanks().unwrap();
+        let count = rdr.consume_blanks().unwrap();
+        println!("... {} blank lines are consumed.", count);
     }
 }
 

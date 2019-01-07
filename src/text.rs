@@ -210,10 +210,13 @@ where
     pub fn next_block(&mut self) -> Result<Option<Vec<Vec<T>>>, failure::Error> {
         let mut block: Option<Vec<Vec<T>>> = None;
         loop {
+            let record = self.reader.peek_record(&mut self.buffer)?;
+            match record {
+                DataRecord::EOF | DataRecord::Blank => break,
+                _ => {},
+            };
             let record = self.reader.next_record(&mut self.buffer)?;
             match record {
-                DataRecord::EOF => break,
-                DataRecord::Blank => break,
                 DataRecord::Comment(_) => continue,
                 DataRecord::Fields(fields) => {
                     let vec = fields.iter().map(|f| T::from_str(f))
@@ -223,20 +226,25 @@ where
                         Err(e) => { return Err(e.into()); },
                     };
                 },
+                _ => panic!("unreachable!"),
             };
         };
         Ok(block)
     }
 
-    pub fn consume_blanks(&mut self) -> Result<(), failure::Error> {
+    /// Consumes blank lines and returns the count of the consumed blank lines.
+    pub fn consume_blanks(&mut self) -> Result<usize, failure::Error> {
+        let mut count = 0;
         loop {
             let record = self.reader.peek_record(&mut self.buffer)?;
             match record {
-                DataRecord::Blank | DataRecord::Comment(_)
-                    => { self.reader.next_record(&mut self.buffer).unwrap(); },
+                DataRecord::Blank | DataRecord::Comment(_) => {
+                    count += 1;
+                    self.reader.next_record(&mut self.buffer).unwrap();
+                },
                 _ => break,
             };
         };
-        Ok(())
+        Ok(count)
     }
 }
