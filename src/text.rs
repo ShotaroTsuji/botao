@@ -73,6 +73,48 @@ impl<'a> Iterator for EnumFields<'a> {
     }
 }
 
+#[derive(Debug)]
+pub struct DataRecordReaderBuilder<RdType, FdType> {
+    record_delimiter: RdType,
+    field_delimiter: FdType,
+}
+
+impl DataRecordReaderBuilder<(), ()> {
+    pub fn new() -> Self {
+        DataRecordReaderBuilder {
+            record_delimiter: (),
+            field_delimiter: (),
+        }
+    }
+}
+
+impl DataRecordReaderBuilder<u8, u8> {
+    pub fn build<R: io::BufRead>(self, stream: R) -> DataRecordReader<R> {
+        DataRecordReader {
+            buffer: stream,
+            record_delimiter: self.record_delimiter,
+            field_delimiter: self.field_delimiter,
+            peek_buf: None,
+        }
+    }
+}
+
+impl<RdType, FdType> DataRecordReaderBuilder<RdType, FdType> {
+    pub fn record_delimiter(self, delim: u8) -> DataRecordReaderBuilder<u8, FdType> {
+        DataRecordReaderBuilder {
+            record_delimiter: delim,
+            field_delimiter: self.field_delimiter,
+        }
+    }
+
+    pub fn field_delimiter(self, delim: u8) -> DataRecordReaderBuilder<RdType, u8> {
+        DataRecordReaderBuilder {
+            record_delimiter: self.record_delimiter,
+            field_delimiter: delim,
+        }
+    }
+}
+
 /// Error type returned by `DataRecordReader` and `DataBlockReader`.
 #[derive(Debug, Fail)]
 pub enum ReaderError {
