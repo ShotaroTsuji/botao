@@ -91,7 +91,7 @@ impl DataRecordReaderBuilder<(), ()> {
 impl DataRecordReaderBuilder<u8, u8> {
     pub fn build<R: io::BufRead>(self, stream: R) -> DataRecordReader<R> {
         DataRecordReader {
-            buffer: stream,
+            stream: stream,
             record_delimiter: self.record_delimiter,
             field_delimiter: self.field_delimiter,
             peek_buf: None,
@@ -131,7 +131,7 @@ pub enum ReaderError {
 /// The lines are delimited with the LF.
 #[derive(Debug)]
 pub struct DataRecordReader<R: io::BufRead> {
-    buffer: R,
+    stream: R,
     record_delimiter: u8,
     field_delimiter: u8,
     peek_buf: Option<DataRecord>,
@@ -155,9 +155,9 @@ impl<R: io::BufRead> DataRecordReader<R> {
     ///
     /// The method `new` creates a `DataRecordReader` from a stream reader that
     /// implements the trait `std::io::BufRead`.
-    pub fn new(buffer: R) -> Self {
+    pub fn new(stream: R) -> Self {
         DataRecordReader {
-            buffer: buffer,
+            stream: stream,
             record_delimiter: b'\n',
             field_delimiter: b',',
             peek_buf: None,
@@ -184,7 +184,7 @@ impl<R: io::BufRead> DataRecordReader<R> {
         if let Some(record) = self.peek_buf.take() {
             return Ok(record);
         }
-        let result = self.buffer.read_until(self.record_delimiter, buf)
+        let result = self.stream.read_until(self.record_delimiter, buf)
                          .map_err(|e| ReaderError::Io(e))?;
         if result == 0 {
             Ok(DataRecord::EOF)
