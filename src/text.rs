@@ -94,6 +94,7 @@ impl DataRecordReaderBuilder<u8, u8> {
             stream: stream,
             record_delimiter: self.record_delimiter,
             field_delimiter: self.field_delimiter,
+            buffer: Vec::new(),
             peek_buf: None,
         }
     }
@@ -134,6 +135,7 @@ pub struct DataRecordReader<R: io::BufRead> {
     stream: R,
     record_delimiter: u8,
     field_delimiter: u8,
+    buffer: Vec<u8>,
     peek_buf: Option<DataRecord>,
 }
 
@@ -160,6 +162,7 @@ impl<R: io::BufRead> DataRecordReader<R> {
             stream: stream,
             record_delimiter: b'\n',
             field_delimiter: b',',
+            buffer: Vec::new(),
             peek_buf: None,
         }
     }
@@ -172,32 +175,32 @@ impl<R: io::BufRead> DataRecordReader<R> {
         self.field_delimiter = delim;
     }
 
-    pub fn peek_record(&mut self, buf: &mut Vec<u8>) -> Result<&DataRecord, failure::Error> {
+    pub fn peek_record(&mut self) -> Result<&DataRecord, failure::Error> {
         if self.peek_buf.is_none() {
-            let record = self.next_record(buf)?;
+            let record = self.next_record()?;
             let _ = self.peek_buf.replace(record);
         }
         Ok(self.peek_buf.as_ref().unwrap())
     }
 
-    pub fn next_record(&mut self, buf: &mut Vec<u8>) -> Result<DataRecord, failure::Error> {
+    pub fn next_record(&mut self) -> Result<DataRecord, failure::Error> {
         if let Some(record) = self.peek_buf.take() {
             return Ok(record);
         }
-        let result = self.stream.read_until(self.record_delimiter, buf)
+        let result = self.stream.read_until(self.record_delimiter, &mut self.buffer)
                          .map_err(|e| ReaderError::Io(e))?;
         if result == 0 {
             Ok(DataRecord::EOF)
         } else {
-            if buf[0] == b'#' {
-                let comment = String::from_utf8(buf.clone())
+            if self.buffer[0] == b'#' {
+                let comment = String::from_utf8(self.buffer.clone())
                                      .map_err(|e| ReaderError::FromUTF8(e))?;
-                buf.clear();
+                self.buffer.clear();
                 Ok(DataRecord::Comment(comment))
             } else {
-                let s = String::from_utf8(buf.clone())
+                let s = String::from_utf8(self.buffer.clone())
                                .map_err(|e| ReaderError::FromUTF8(e))?;
-                buf.clear();
+                self.buffer.clear();
                 let fields: Vec<String>
                     = enum_fields(self.field_delimiter, s.as_str()).map(|s| s.to_owned()).collect();
                 if fields.len() == 0 {
@@ -222,7 +225,6 @@ where
     T: std::str::FromStr
 {
     reader: DataRecordReader<R>,
-    buffer: Vec<u8>,
     _phantom: PhantomData<fn() -> T>,
 }
 
@@ -235,7 +237,6 @@ where
     pub fn new(reader: DataRecordReader<R>) -> Self {
         DataBlockReader {
             reader: reader,
-            buffer: Vec::new(),
             _phantom: PhantomData,
         }
     }
@@ -252,12 +253,12 @@ where
     pub fn next_block(&mut self) -> Result<Option<Vec<Vec<T>>>, failure::Error> {
         let mut block: Option<Vec<Vec<T>>> = None;
         loop {
-            let record = self.reader.peek_record(&mut self.buffer)?;
+            let record = self.reader.peek_record()?;
             match record {
                 DataRecord::EOF | DataRecord::Blank => break,
                 _ => {},
             };
-            let record = self.reader.next_record(&mut self.buffer)?;
+            let record = self.reader.next_record()?;
             match record {
                 DataRecord::Comment(_) => continue,
                 DataRecord::Fields(fields) => {
@@ -278,11 +279,11 @@ where
     pub fn consume_blanks(&mut self) -> Result<usize, failure::Error> {
         let mut count = 0;
         loop {
-            let record = self.reader.peek_record(&mut self.buffer)?;
+            let record = self.reader.peek_record()?;
             match record {
                 DataRecord::Blank | DataRecord::Comment(_) => {
                     count += 1;
-                    self.reader.next_record(&mut self.buffer).unwrap();
+                    self.reader.next_record().unwrap();
                 },
                 _ => break,
             };
