@@ -2,6 +2,10 @@
 name = "botao"
 version = "0.1.0"
 authors = ["Shotaro Tsuji <Shotaro.Tsuji@gmail.com>"]
+repository = "https://github.com/ShotaroTsuji/botao"
+license = "MIT/Apache-2.0"
+readme = "README.md"
+description = "A text data file reader"
 edition = "2018"
 
 [dependencies]
