@@ -1,5 +1,6 @@
 use memchr::memchr;
 use failure::Fail;
+use std::fmt::Display;
 use std::marker::PhantomData;
 use std::io;
 
@@ -13,7 +14,7 @@ use std::io;
 /// # Examples
 ///
 /// ```
-/// use botao::text::next_field;
+/// use botao::fields::next_field;
 /// let result = next_field(b',', "10, 20, 30");
 /// assert_eq!(result, ("10", " 20, 30"));
 /// ```
@@ -35,7 +36,7 @@ pub fn next_field(delim: u8, record: &str) -> (&str, &str) {
 /// # Examples
 ///
 /// ```
-/// use botao::text::enum_fields;
+/// use botao::fields::enum_fields;
 /// let mut iter = enum_fields(b',', "10, 20, 30");
 /// assert_eq!(iter.next(), Some("10"));
 /// assert_eq!(iter.next(), Some("20"));
@@ -71,4 +72,34 @@ impl<'a> Iterator for EnumFields<'a> {
             Some(field)
         }
     }
+}
+
+/// Formats a record into string.
+///
+/// # Arguments
+/// * `delim` - a field delimiter
+/// * `record` - a record or fields
+///
+/// # Examples
+/// ```
+/// use botao::fields::format_fields;
+/// let s = format_fields(b' ', &[0, 1, 2, 3]);
+/// assert_eq!(s, "0 1 2 3");
+/// let s = format_fields(b',', &[0, 1, 2, 3]);
+/// assert_eq!(s, "0,1,2,3");
+/// ```
+pub fn format_fields<T: Display>(delim: u8, record: &[T]) -> String {
+    let delim: char = delim.into();
+    let len = record.len();
+    let mut s = String::new();
+
+    for i in 0..(len-1) {
+        let t = record[i].to_string();
+        s.push_str(&t);
+        s.push(delim);
+    }
+    let t = record[len-1].to_string();
+    s.push_str(&t);
+
+    s
 }
