@@ -74,11 +74,26 @@ impl<'a> Iterator for EnumFields<'a> {
     }
 }
 
+pub fn format_fields<T: AsRef<str>>(delim: u8, record: &[T]) -> String {
+    let delim: char = delim.into();
+    let len = record.len();
+    let mut s = String::new();
+
+    for i in 0..(len-1) {
+        s.push_str(record[i].as_ref());
+        s.push(delim);
+    }
+    s.push_str(record[len-1].as_ref());
+
+    s
+}
+
 /// Formats a record into string.
 ///
 /// # Arguments
 /// * `delim` - a field delimiter
 /// * `record` - a record or fields
+/// * `f` - a function that formats a field
 ///
 /// # Examples
 /// ```
@@ -88,17 +103,20 @@ impl<'a> Iterator for EnumFields<'a> {
 /// let s = format_fields(b',', &[0, 1, 2, 3]);
 /// assert_eq!(s, "0,1,2,3");
 /// ```
-pub fn format_fields<T: Display>(delim: u8, record: &[T]) -> String {
+pub fn format_fields_with<T, F>(delim: u8, record: &[T], f: F) -> String
+where
+    F: Fn(&T) -> String,
+{
     let delim: char = delim.into();
     let len = record.len();
     let mut s = String::new();
 
     for i in 0..(len-1) {
-        let t = record[i].to_string();
+        let t = f(&record[i]);
         s.push_str(&t);
         s.push(delim);
     }
-    let t = record[len-1].to_string();
+    let t = f(&record[len-1]);
     s.push_str(&t);
 
     s

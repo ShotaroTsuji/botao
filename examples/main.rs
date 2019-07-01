@@ -1,4 +1,6 @@
 use botao::fields::enum_fields;
+use botao::fields::format_fields;
+use botao::fields::format_fields_with;
 
 fn test_enum_fields(delim: u8, record: &str) {
     println!("delim : {:?}", delim as char);
@@ -33,4 +35,8 @@ fn main() {
     test_enum_fields(b',', "\n");
     test_enum_fields(b' ', "     \n");
     test_enum_fields(b',', ",\n");
+
+    println!("{}", format_fields(b' ', &["abc", "de", "fgh"]));
+    println!("{}", format_fields_with(b' ', &[0u32, 1, 2, 3, 4], u32::to_string));
+    println!("{}", format_fields_with(b',', &[0u32, 1, 2, 3, 4], u32::to_string));
 }
