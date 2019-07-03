@@ -74,6 +74,20 @@ impl<'a> Iterator for EnumFields<'a> {
     }
 }
 
+/// Formats a record.
+///
+/// # Arguments
+/// * `delim` : a field delimiter.
+/// * `record` : a record consists of fields.
+///
+/// # Examples
+/// ```
+/// use botao::fields::format_fields;
+/// let s = format_fields(b' ', &["0", "1", "2", "3"]);
+/// assert_eq!(s, "0 1 2 3");
+/// let s = format_fields(b',', &["0", "1", "2", "3"]);
+/// assert_eq!(s, "0,1,2,3");
+/// ```
 pub fn format_fields<T: AsRef<str>>(delim: u8, record: &[T]) -> String {
     let delim: char = delim.into();
     let len = record.len();
@@ -98,9 +112,9 @@ pub fn format_fields<T: AsRef<str>>(delim: u8, record: &[T]) -> String {
 /// # Examples
 /// ```
 /// use botao::fields::format_fields;
-/// let s = format_fields(b' ', &[0, 1, 2, 3]);
+/// let s = format_fields_with(b' ', &[0u32, 1, 2, 3], u32::to_string);
 /// assert_eq!(s, "0 1 2 3");
-/// let s = format_fields(b',', &[0, 1, 2, 3]);
+/// let s = format_fields_with(b',', &[0u32, 1, 2, 3], u32::to_string);
 /// assert_eq!(s, "0,1,2,3");
 /// ```
 pub fn format_fields_with<T, F>(delim: u8, record: &[T], f: F) -> String
