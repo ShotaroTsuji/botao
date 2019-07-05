@@ -76,62 +76,58 @@ impl<'a> Iterator for EnumFields<'a> {
 
 /// Formats a record.
 ///
-/// # Arguments
-/// * `delim` : a field delimiter.
-/// * `record` : a record consists of fields.
-///
-/// # Examples
-/// ```
-/// use botao::fields::format_fields;
-/// let s = format_fields(b' ', &["0", "1", "2", "3"]);
-/// assert_eq!(s, "0 1 2 3");
-/// let s = format_fields(b',', &["0", "1", "2", "3"]);
-/// assert_eq!(s, "0,1,2,3");
-/// ```
+/// This function is a wrapper for the function `format_fields_from_iter`.
+/// It takes a delimiter and an slice of strings.
 pub fn format_fields<T: AsRef<str>>(delim: u8, record: &[T]) -> String {
-    let delim: char = delim.into();
-    let len = record.len();
-    let mut s = String::new();
-
-    for i in 0..(len-1) {
-        s.push_str(record[i].as_ref());
-        s.push(delim);
-    }
-    s.push_str(record[len-1].as_ref());
-
-    s
+    let mut buf = String::new();
+    format_fields_from_iter(delim, record.iter(), &mut buf);
+    buf
 }
 
-/// Formats a record into string.
+/// Formats a record into a string.
 ///
-/// # Arguments
-/// * `delim` - a field delimiter
-/// * `record` - a record or fields
-/// * `f` - a function that formats a field
-///
-/// # Examples
-/// ```
-/// use botao::fields::format_fields;
-/// let s = format_fields_with(b' ', &[0u32, 1, 2, 3], u32::to_string);
-/// assert_eq!(s, "0 1 2 3");
-/// let s = format_fields_with(b',', &[0u32, 1, 2, 3], u32::to_string);
-/// assert_eq!(s, "0,1,2,3");
-/// ```
+/// This function is a wrapper for the function `format_fields_from_iter`.
+/// For convenience, it takes a slice and a closure or function that
+/// converts its elements into string.
 pub fn format_fields_with<T, F>(delim: u8, record: &[T], f: F) -> String
 where
     F: Fn(&T) -> String,
 {
+    let mut buf = String::new();
+    format_fields_from_iter(delim, record.iter().map(f), &mut buf);
+    buf
+}
+
+/// Formats a record into a string with a delimiter.
+///
+/// # Arguments
+/// * `delim` - a delimiter.
+/// * `iter` - an iterator that produces fields.
+/// * `buf` - a buffer where the formatted string is stored.
+///
+/// # Examples
+/// ```
+/// use botao::fields::format_fields_from_iter;
+/// let a = [0u32, 1, 2, 3, 4];
+/// let mut buf = String::new();
+/// format_fields_from_iter(b' ', a.iter().map(u32::to_string), &mut buf);
+/// assert_eq!(buf, "0 1 2 3 4");
+/// ```
+pub fn format_fields_from_iter<T, I>(delim: u8, mut iter: I, buf: &mut String)
+where
+    T: AsRef<str>,
+    I: Iterator<Item=T>,
+{
     let delim: char = delim.into();
-    let len = record.len();
-    let mut s = String::new();
 
-    for i in 0..(len-1) {
-        let t = f(&record[i]);
-        s.push_str(&t);
-        s.push(delim);
+    match iter.next() {
+        Some(field) => {
+            buf.push_str(field.as_ref());
+            for field in iter {
+                buf.push(delim);
+                buf.push_str(field.as_ref());
+            }
+        },
+        None => {},
     }
-    let t = f(&record[len-1]);
-    s.push_str(&t);
-
-    s
 }
