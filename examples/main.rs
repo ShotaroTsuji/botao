@@ -1,5 +1,6 @@
 use botao::fields::enum_fields;
 use botao::fields::format_fields;
+use botao::fields::format_fields_from_iter;
 use botao::fields::format_fields_with;
 
 fn test_enum_fields(delim: u8, record: &str) {
@@ -36,6 +37,25 @@ fn main() {
     test_enum_fields(b' ', "     \n");
     test_enum_fields(b',', ",\n");
 
+    let a: [&str; 0] = [];
+    let mut buf = String::new();
+    format_fields_from_iter(b' ', a.iter(), &mut buf);
+    println!("{}", buf);
+
+    buf.clear();
+    format_fields_from_iter(b' ', ["a", "bc", "def"].iter(), &mut buf);
+    println!("{}", buf);
+
+    buf.clear();
+    format_fields_from_iter(b',', ["apple", "banana"].iter(), &mut buf);
+    println!("{}", buf);
+
+    buf.clear();
+    format_fields_from_iter(b',',
+                            [0u32, 1, 2, 3, 4, 5].iter().map(u32::to_string),
+                            &mut buf);
+    println!("{}", buf);
+    println!("{}", format_fields(b' ', &a));
     println!("{}", format_fields(b' ', &["abc", "de", "fgh"]));
     println!("{}", format_fields_with(b' ', &[0u32, 1, 2, 3, 4], u32::to_string));
     println!("{}", format_fields_with(b',', &[0u32, 1, 2, 3, 4], u32::to_string));
